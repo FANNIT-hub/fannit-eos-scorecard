@@ -173,12 +173,22 @@ def _get_week_columns(header_row: int, max_col: str = "DZ") -> list[tuple[int, s
     out: list[tuple[int, str]] = []
     for i, h in enumerate(headers):
         col_idx = 9 + i  # I = column 9 (1-based)
-        label = "" if h is None else str(h).strip()
-        if not label:
+        if h is None:
             continue
-        if label.lower() in NON_WEEK_HEADER_LABELS:
+        # Headers can have line breaks (e.g. "Calendar\nMonth\nActual").
+        # Collapse all whitespace before checking against our skip-list.
+        normalized = " ".join(str(h).split()).lower()
+        if not normalized:
             continue
-        out.append((col_idx, label))
+        if normalized in NON_WEEK_HEADER_LABELS:
+            continue
+        # Only treat as a week column if the label looks like a date
+        # (contains a slash, e.g. "1/5", "4/27"). This is a stricter check
+        # than just "skip known labels" and protects against unexpected
+        # header content leaking through.
+        if "/" not in normalized:
+            continue
+        out.append((col_idx, normalized))
     return out
 
 
