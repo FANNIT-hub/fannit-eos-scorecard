@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FANNIT EOS L10 Scorecard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <aside class="sidebar">
+    <header class="brand">
+      <div class="logo">EOS</div>
+      <div>
+        <div class="brand-title">EOS L10 Scorecard</div>
+        <div class="brand-sub">2026 Performance Tracker</div>
+      </div>
+    </header>
+
+    <nav>
+      <div class="nav-label">Agencies</div>
+      <ul id="agency-nav" class="agency-list">
+        <li class="loading">Loading…</li>
+      </ul>
+
+      <div class="nav-label" style="margin-top:1.5rem">Summary</div>
+      <ul class="agency-list">
+        <li class="agency-item disabled" title="Coming soon">Total Rollup</li>
+      </ul>
+    </nav>
+
+    <footer class="sidebar-footer">
+      Live data: existing sheet values.<br />Snapshot job not yet wired.
+    </footer>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <h1 id="page-title">— EOS Scorecard</h1>
+      <div class="period-tabs">
+        <button class="period-tab active" data-period="Weekly">Weekly</button>
+        <button class="period-tab" data-period="Q1" disabled>Q1</button>
+        <button class="period-tab" data-period="Q2" disabled>Q2</button>
+        <button class="period-tab" data-period="Q3" disabled>Q3</button>
+        <button class="period-tab" data-period="Q4" disabled>Q4</button>
+        <button class="period-tab" data-period="LastMonth" disabled>Last Month</button>
+        <button class="period-tab" data-period="YTD" disabled>YTD</button>
+      </div>
+    </header>
+
+    <section id="kpi-grid" class="kpi-grid">
+      <div class="placeholder">Loading scorecard…</div>
+    </section>
+
+    <section class="placeholder-charts">
+      <div class="chart-card">
+        <h3>Traffic &amp; Discovery Trend</h3>
+        <p class="muted">Charts will populate once the snapshot job writes weekly history.</p>
+      </div>
+      <div class="chart-card">
+        <h3>Financial Metrics</h3>
+        <p class="muted">Charts will populate once the snapshot job writes weekly history.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
