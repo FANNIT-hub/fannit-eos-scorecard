@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Env / secrets
+.env
+.env.local
+*.pem
+*.key
+service-account*.json
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+build/
+*.log
+.npm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Cloud Build / local artifacts
+.gcloud/
+gha-creds-*.json
