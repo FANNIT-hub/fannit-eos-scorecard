@@ -22,8 +22,8 @@ from ..config import SCORECARD_SHEET_ID, SCORECARD_TAB_NAME
 AGENCY_BLOCKS: dict[str, dict[str, int]] = {
     "FANNIT": {"header_row": 36, "kpi_rows_start": 38},
     "HMC": {"header_row": 73, "kpi_rows_start": 75},
-    # TMSA: TBD
-    # IPA: TBD
+    "TMSA": {"header_row": 94, "kpi_rows_start": 96},
+    "IPA": {"header_row": 115, "kpi_rows_start": 117},
 }
 
 
