@@ -36,7 +36,15 @@ def list_agencies():
 
 
 @app.get("/api/scorecard")
-def get_scorecard(agency: str = "FANNIT"):
+def get_scorecard(agency: str = "FANNIT", date: str | None = None):
+    """Returns the scorecard payload for one agency for a specific week.
+
+    Args:
+        agency: FANNIT / HMC / TMSA / IPA.
+        date: M/D label of the week to display (e.g. '4/27'). If omitted,
+            defaults to last completed week (most recent Monday strictly
+            before today).
+    """
     if agency not in AGENCY_BLOCKS:
         return JSONResponse(
             status_code=404,
@@ -44,12 +52,10 @@ def get_scorecard(agency: str = "FANNIT"):
                 "error": "agency_not_mapped",
                 "agency": agency,
                 "available": sorted(AGENCY_BLOCKS.keys()),
-                "note": "TMSA and IPA block offsets in the 2026 Scorecard tab "
-                "still need to be wired. FANNIT and HMC are live.",
             },
         )
     try:
-        return kpis_to_payload(agency)
+        return kpis_to_payload(agency, week_label=date)
     except Exception as exc:  # noqa: BLE001
         log.exception("Failed to read scorecard for %s", agency)
         return JSONResponse(

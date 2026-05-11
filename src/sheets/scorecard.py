@@ -22,10 +22,38 @@ This reader pulls per KPI:
 """
 
 from dataclasses import asdict, dataclass, field
+from datetime import date, timedelta
 from typing import Optional
 
 from .client import get_sheets_service
 from ..config import SCORECARD_SHEET_ID, SCORECARD_TAB_NAME
+
+SCORECARD_YEAR = 2026  # tab is named "2026 Scorecard"; revisit when year rolls over
+
+VALID_PERIODS = ("Weekly", "LastMonth", "Q1", "Q2", "Q3", "Q4", "YTD")
+
+
+def _today() -> date:
+    """Wrapper so tests can stub. Returns the local-date today."""
+    return date.today()
+
+
+def last_completed_week_label(today: date | None = None) -> str:
+    """The M/D label for the most recent Monday strictly before `today`.
+
+    The sheet uses Monday-as-week-end labels (e.g. '4/27', '5/4'). If today
+    is a Monday, the current week is just starting and we treat 'last
+    completed' as the previous Monday (7 days earlier). This is the default
+    week the dashboard renders so all KPI cards align on one consistent week
+    instead of each landing on whichever weekly cell happens to be populated.
+    """
+    t = today or _today()
+    dsm = t.weekday()  # Mon=0..Sun=6
+    if dsm == 0:
+        d = t - timedelta(days=7)
+    else:
+        d = t - timedelta(days=dsm)
+    return f"{d.month}/{d.day}"
 
 
 # Agency block layout in the 2026 Scorecard tab.
@@ -208,9 +236,25 @@ def _compute_weekly_hit_pct(
     return current / weekly_goal
 
 
-def read_agency_kpis(agency: str, weeks_history: int = 8) -> list[Kpi]:
-    """Returns 8 KPI rows including the rightmost-populated weekly value plus
-    the last `weeks_history` populated weekly values for trend display.
+def read_agency_kpis(
+    agency: str,
+    week_label: str | None = None,
+    weeks_history: int = 8,
+) -> tuple[list[Kpi], list[str]]:
+    """Returns (kpis, available_week_labels).
+
+    Args:
+        agency: agency key (FANNIT / HMC / TMSA / IPA).
+        week_label: M/D label of the week to display as the big-number on each
+            card. If None, defaults to `last_completed_week_label()` so all
+            KPI cards land on the same week (the most recent fully-elapsed
+            week). Pass a specific label like "4/27" to render that week.
+        weeks_history: number of trailing populated weeks to return for the
+            detail-table trend strip.
+
+    The available_week_labels return value is the union of populated weekly
+    cells across all KPIs in this agency block, sorted chronologically. The
+    frontend uses it to populate the week-picker dropdown.
     """
     if agency not in AGENCY_BLOCKS:
         raise ValueError(
@@ -242,7 +286,11 @@ def read_agency_kpis(agency: str, weeks_history: int = 8) -> list[Kpi]:
     )
     rows = resp.get("values", [])
 
+    # Default selected week = last completed Monday strictly before today.
+    target_label = week_label or last_completed_week_label()
+
     out: list[Kpi] = []
+    available_dates: set[str] = set()
     for i, label in enumerate(KPI_LABELS):
         row = rows[i] if i < len(rows) else []
         annual_goal = _to_float(row[1]) if len(row) > 1 else None
@@ -256,15 +304,18 @@ def read_agency_kpis(agency: str, weeks_history: int = 8) -> list[Kpi]:
             v = _to_float(row[offset]) if 0 <= offset < len(row) else None
             if v is not None:
                 all_weeks.append(WeekValue(date=date_str, value=v))
+                available_dates.add(date_str)
 
-        # Most recent populated week = rightmost; last N = trailing for the table
-        current = all_weeks[-1] if all_weeks else None
+        # Pick the value for the requested target week (not rightmost).
+        selected = next((w for w in all_weeks if w.date == target_label), None)
+        current_value = selected.value if selected else None
+        current_date = target_label  # always reflect the requested week label
+
+        # Last N trailing populated weeks for the detail-table trend strip.
         recent = all_weeks[-weeks_history:] if all_weeks else []
 
         metric_type = KPI_TYPE.get(label, "incremental")
         weekly_goal = _compute_weekly_goal(annual_goal, metric_type)
-        current_value = current.value if current else None
-        current_date = current.date if current else None
         weekly_hit = _compute_weekly_hit_pct(current_value, weekly_goal)
 
         out.append(
@@ -283,13 +334,27 @@ def read_agency_kpis(agency: str, weeks_history: int = 8) -> list[Kpi]:
                 weeks=recent,
             )
         )
-    return out
+
+    # Sort week labels chronologically. Format is M/D so split + int compare
+    # gives correct calendar order within a single year.
+    available_weeks = sorted(
+        available_dates,
+        key=lambda s: tuple(int(x) for x in s.split("/")),
+    )
+    return out, available_weeks
 
 
-def kpis_to_payload(agency: str) -> dict:
-    """Public wrapper that returns a JSON-friendly payload for the API."""
-    kpis = read_agency_kpis(agency)
+def kpis_to_payload(agency: str, week_label: str | None = None) -> dict:
+    """Public wrapper that returns a JSON-friendly payload for the API.
+
+    If week_label is None, the reader defaults to last completed week so all
+    cards land on a single aligned week.
+    """
+    kpis, available_weeks = read_agency_kpis(agency, week_label=week_label)
+    selected = week_label or last_completed_week_label()
     return {
         "agency": agency,
+        "selected_week": selected,
+        "available_weeks": available_weeks,
         "kpis": [asdict(k) for k in kpis],
     }

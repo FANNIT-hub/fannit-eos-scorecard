@@ -35,15 +35,21 @@
 
   <main class="main">
     <header class="topbar">
-      <h1 id="page-title">— EOS Scorecard</h1>
+      <div class="title-block">
+        <h1 id="page-title">— EOS Scorecard</h1>
+        <div class="week-picker-wrap">
+          <label for="week-picker">Week ending:</label>
+          <select id="week-picker"></select>
+        </div>
+      </div>
       <div class="period-tabs">
         <button class="period-tab active" data-period="Weekly">Weekly</button>
-        <button class="period-tab" data-period="Q1" disabled>Q1</button>
-        <button class="period-tab" data-period="Q2" disabled>Q2</button>
-        <button class="period-tab" data-period="Q3" disabled>Q3</button>
-        <button class="period-tab" data-period="Q4" disabled>Q4</button>
-        <button class="period-tab" data-period="LastMonth" disabled>Last Month</button>
-        <button class="period-tab" data-period="YTD" disabled>YTD</button>
+        <button class="period-tab" data-period="Q1" disabled title="Coming in next pass">Q1</button>
+        <button class="period-tab" data-period="Q2" disabled title="Coming in next pass">Q2</button>
+        <button class="period-tab" data-period="Q3" disabled title="Coming in next pass">Q3</button>
+        <button class="period-tab" data-period="Q4" disabled title="Coming in next pass">Q4</button>
+        <button class="period-tab" data-period="LastMonth" disabled title="Coming in next pass">Last Month</button>
+        <button class="period-tab" data-period="YTD" disabled title="Coming in next pass">YTD</button>
       </div>
     </header>
 

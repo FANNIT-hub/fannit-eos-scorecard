@@ -108,12 +108,37 @@ body {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1.5rem;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.title-block {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 .topbar h1 {
   font-size: 18px;
   font-weight: 600;
   margin: 0;
 }
+.week-picker-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+#week-picker {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+#week-picker:hover { background: var(--panel-hover); }
 .period-tabs {
   display: flex;
   background: var(--panel);

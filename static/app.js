@@ -7,6 +7,7 @@ let state = {
   agencies: [],
   unmapped: [],
   current: null,
+  selectedWeek: null,  // M/D label, or null = backend picks last-completed
 };
 
 async function init() {
@@ -43,25 +44,57 @@ function renderSidebar() {
   }
 }
 
-async function loadAgency(agency) {
+async function loadAgency(agency, week = null) {
   state.current = agency;
+  if (week !== null) state.selectedWeek = week;
   document.getElementById("page-title").textContent = `${agency} — EOS Scorecard`;
   renderSidebar();
   document.getElementById("kpi-grid").innerHTML = '<div class="placeholder">Reading sheet…</div>';
   document.getElementById("detail-table-wrap").innerHTML = "";
 
+  const params = new URLSearchParams({ agency });
+  if (state.selectedWeek) params.set("date", state.selectedWeek);
+
   try {
-    const res = await fetch(`/api/scorecard?agency=${encodeURIComponent(agency)}`);
+    const res = await fetch(`/api/scorecard?${params}`);
     const data = await res.json();
     if (!res.ok) {
       showError(`API error: ${data.error || res.status}`);
       return;
     }
+    // Backend tells us which week it actually rendered (default = last completed).
+    state.selectedWeek = data.selected_week || state.selectedWeek;
+    renderWeekPicker(data.available_weeks || [], data.selected_week);
     renderGrid(data.kpis || []);
     renderDetailTable(data.kpis || []);
   } catch (err) {
     showError(`Network error: ${err.message}`);
   }
+}
+
+function renderWeekPicker(allWeeks, selected) {
+  const picker = document.getElementById("week-picker");
+  if (!picker) return;
+  picker.innerHTML = "";
+  if (!allWeeks.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "no weeks";
+    picker.appendChild(opt);
+    picker.disabled = true;
+    return;
+  }
+  picker.disabled = false;
+  // Reverse so most recent week appears at top of dropdown
+  const reversed = [...allWeeks].reverse();
+  for (const w of reversed) {
+    const opt = document.createElement("option");
+    opt.value = w;
+    opt.textContent = w;
+    if (w === selected) opt.selected = true;
+    picker.appendChild(opt);
+  }
+  picker.onchange = () => loadAgency(state.current, picker.value);
 }
 
 function renderGrid(kpis) {
