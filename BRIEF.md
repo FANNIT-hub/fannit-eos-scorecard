@@ -2,7 +2,7 @@
 
 > **Audience:** Chris Fink (owner) and any future operator (technical or non-technical) who needs to run, deploy, debug, or extend this system.
 >
-> **Status:** Living document. Update on every architectural change, new integration, or new operational procedure. Last meaningful update: 2026-04-27.
+> **Status:** Living document. Update on every architectural change, new integration, or new operational procedure. Last meaningful update: 2026-05-11.
 
 ---
 
@@ -10,10 +10,23 @@
 
 A self-updating EOS Level 10 Scorecard dashboard for the FANNIT family of agencies (FANNIT, TMSA, HMC, IPA). Replaces the manual weekly update of the `2026 Scorecard` tab in the existing `All Accounts & KPIs - FANNIT` Google Sheet.
 
-The system:
-1. Reads goals + existing weekly actuals directly from the Google Sheet on every dashboard request (no caching layer).
-2. Once the snapshot job is wired (Cloud Scheduler weekly), it will pull from GA4, HighLevel, Teamwork, QBO, and the internal Upsells & Churn tab and write actuals back into the same `2026 Scorecard` tab cells, preserving the existing manual workflow as legacy continuity.
-3. Serves a read-only dashboard from Cloud Run mirroring the Perplexity-built prototype layout.
+### Architectural intent (Chris confirmed 2026-05-11)
+
+```
+Sources (GA4, GHL, Teamwork, QBO, Upsells & Churn tab)
+   ↓
+Cloud Run pulls live → renders dashboard
+   ↓
+SAME values pushed into 2026 Scorecard tab on a weekly cron (legacy continuity)
+```
+
+Sources are the **source of truth**. The sheet is a **write target**, not a read source. The sheet's existing weekly columns continue to be populated for anyone who still relies on the legacy view.
+
+### Where we are today
+
+The dashboard architecture above is the target. Current implementation **still reads from the sheet** while source integrations are being built one at a time. As each source comes online, the corresponding KPI swaps over to live data. The cron-driven sheet write is the last step (built once the read paths are proven).
+
+Serving layer: read-only dashboard from Cloud Run mirroring the Perplexity-built prototype layout.
 
 ---
 
@@ -28,7 +41,7 @@ The system:
 | Secret Manager | https://console.cloud.google.com/security/secret-manager?project=fannit-eos-scorecard |
 | Source Google Sheet | https://docs.google.com/spreadsheets/d/1QyyYNoNR05V8hxjGSBYfvPqWANx37kJiGw3ePx-hz8c/edit |
 
-Latest deployed Cloud Run revision: `eos-scorecard-00005-229` (commit `92dae7b`, "pass2b").
+Latest deployed Cloud Run revision: `eos-scorecard-00006-kp6` (commit `94d8414`, "weekpicker").
 
 ---
 
@@ -128,10 +141,10 @@ To grant the runtime SA access to a new resource (e.g. a new GA4 property): add 
 
 | Source | Auth method | Storage | Status |
 |---|---|---|---|
-| GA4 | Service account (Viewer per property) | n/a (SA email alone) | ❌ SA not yet added to the 4 properties |
+| GA4 | Service account (Viewer per property) | n/a (SA email alone) | ❌ SA not yet added to 4 properties. **GA4 UI rejects service-account emails;** must add via Analytics Admin API. Requires Chris to run `gcloud auth application-default login --scopes=...analytics.edit` first. Deferred 2026-05-11. |
 | HighLevel | Private Integration Token (PIT, location-scoped) | Secret Manager | ✅ All 4 PITs stored: `highlevel-pit-fannit`, `highlevel-pit-hmc`, `highlevel-pit-tmsa`, `highlevel-pit-ipa` |
 | Teamwork | API token (per-user, one shared) | Secret Manager `teamwork-api-token` | ✅ Stored |
-| QBO | OAuth 2.0 + refresh token | Secret Manager (planned) | ❌ Intuit Developer app not yet registered; no tokens minted |
+| QBO | OAuth 2.0 + refresh token | Secret Manager (planned) | ❌ Intuit Developer app not yet registered; no tokens minted. Separately, an Intuit QBO MCP connector was loaded into Chris's Claude session for ad-hoc queries, but that's session-scoped to Claude and not callable from Cloud Run. |
 | Google Sheets | Service account → Editor on workbook | Workbook share dialog | ✅ Done |
 
 ---
@@ -267,9 +280,15 @@ This logic lives in `_get_week_columns()`. Bug history: an early version did exa
 
 ### 9.2 `/api/scorecard` payload shape
 
+`GET /api/scorecard?agency=FANNIT&date=5/4`
+
+The `date` query param picks the week. M/D format. If omitted, the backend defaults to `last_completed_week_label()` (most recent Monday strictly before today) so all KPI cards align on a single week.
+
 ```json
 {
   "agency": "FANNIT",
+  "selected_week": "5/4",
+  "available_weeks": ["1/5", "1/12", "...", "5/4", "5/11"],
   "kpis": [
     {
       "label": "Website / LP Traffic",
@@ -279,27 +298,30 @@ This logic lives in `_get_week_columns()`. Bug history: an early version did exa
       "annual_goal": 36000.0,
       "ytd_actual": 11026.0,
       "hit_pct": 0.306,
-      "current_week_value": 436.0,
-      "current_week_date": "4/27",
+      "current_week_value": 283.0,
+      "current_week_date": "5/4",
       "weekly_goal": 692.3,
-      "weekly_hit_pct": 0.63,
+      "weekly_hit_pct": 0.41,
       "weeks": [
         {"date": "3/9", "value": 325},
         {"date": "3/16", "value": 299},
-        ...
+        "..."
       ]
     },
-    ...
+    "..."
   ]
 }
 ```
 
 `fmt` is one of `"number"`, `"currency"`, `"percent"`. `metric_type` is one of `"incremental"`, `"snapshot"`, `"rate"`. The frontend uses both for formatting and color logic.
 
+`available_weeks` is the union of populated weekly cells across all 8 KPIs for that agency block, sorted chronologically. The frontend feeds it directly to the week-picker dropdown.
+
 ### 9.3 Frontend layout (mirrors Perplexity prototype)
 
 - **Left sidebar:** logo + 4 active agency tabs (FANNIT, HMC, IPA, TMSA) + a disabled "Total Rollup" placeholder.
-- **Top-right period tabs:** Weekly active. Q1, Q2, Q3, Q4, Last Month, YTD all disabled until period roll-up logic is implemented.
+- **Top-left of main pane:** title (`<agency> — EOS Scorecard`) plus a **week-picker dropdown** (`Week ending: 5/4`). The dropdown lists every populated week label for that agency in reverse chronological order. Selecting a different week refires `/api/scorecard?...&date=<picked>` and retargets all 8 cards to that week.
+- **Top-right period tabs:** Weekly active. Q1, Q2, Q3, Q4, Last Month, YTD disabled (tooltip: "Coming in next pass") until period roll-up logic is implemented.
 - **Main pane:**
   - 4×2 KPI card grid. Each card: title, source label, current-week value (big number), week-of date tag, weekly goal, weekly hit %, status dot.
   - "Weekly Scorecard Detail" table below: KPI \| Source \| Annual Goal \| YTD \| Hit % + last 8 trailing weekly columns.
@@ -450,6 +472,8 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 | 3 | Cloud Run URL serves `/healthz` via the `StaticFiles` mount fallthrough sometimes (404 from Google front-door) | Treat as a known oddity; `/api/*` and `/` work reliably. May resolve by reordering routes if it matters. |
 | 4 | IPA has no QBO data; cells render "—" | By design. Each integration runs independently; missing creds for one source don't block others. |
 | 5 | Sheet has duplicate "💸 SALES PIPELINE" pipelines in IPA's HL location | Use `T4bqE5CGEaw8P2vU1H0z` (the 63-opportunity variant). The other one is stale. |
+| 6 | GA4 UI rejects service-account emails when adding to property access ("This email doesn't match a Google Account") | Bypass via Analytics Admin API. Requires `gcloud auth application-default login --scopes=...,https://www.googleapis.com/auth/analytics.edit` then POST to `https://analyticsadmin.googleapis.com/v1beta/properties/{id}/accessBindings`. Deferred 2026-05-11 pending Chris running the auth command. |
+| 7 | Default "rightmost populated weekly cell" causes KPI cards to land on DIFFERENT weeks per KPI when some sources update faster than others. Visually reads as "data is wrong." | Fixed in commit `94d8414` (week picker pass). Default is now `last_completed_week_label()` so every card lands on the same week. User can pick any other week from the dropdown. |
 
 ---
 
@@ -457,21 +481,22 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| 1 | Wire GA4 client (sessions per agency, weekly window) | claude | Service account needs Viewer on each of 4 properties first |
-| 2 | Wire HighLevel client (calendars + opportunities + won-stage transitions) | claude | All 4 PITs and IDs ready; calendar inclusion rule defined |
-| 3 | Wire Teamwork client (project filter by Category + Tag) | claude | Token ready; verify exact category names match the Teamwork UI |
-| 4 | Register Intuit Developer app for QBO | Chris | Provides client_id / client_secret + per-realm refresh tokens |
-| 5 | Wire QBO client (AR aging, P&L, Balance Sheet) | claude | After app registration |
-| 6 | Wire `Upsells & Churn` tab reader | claude | Verify aggregate vs per-agency structure first |
-| 7 | Implement snapshot orchestrator (`src/snapshot.py`) | claude | Coordinates all sources, writes to `2026 Scorecard` weekly cells |
-| 8 | Implement period roll-ups (Q1-Q4, Last Month, YTD) | claude | Dashboard tabs disabled until this lands |
-| 9 | Build out chart components (Traffic & Discovery line, Financial bars) | claude | Need ≥4 weeks of trend data |
-| 10 | Set up Cloud Scheduler weekly trigger | claude | Mon 06:00 PT, after snapshot job exists |
-| 11 | Connect GitHub → Cloud Build for auto-deploy | Chris | One-time UI auth |
-| 12 | Stand up Cloudflare Access | Chris + claude | Define viewer allowlist |
-| 13 | Strategy/Planning Calls UI placement | Chris | Currently absent from grid; add as 9th card or merge with Discovery |
-| 14 | Hit % thresholds final values | Chris | Currently 100/50 boundaries, inverted for Churn+AR |
-| 15 | Total Rollup view (sidebar item disabled today) | claude | Aggregate KPIs across all 4 agencies |
+| 1 | Run `gcloud auth application-default login --scopes=...analytics.edit` so we can grant the runtime SA Viewer access on the 4 GA4 properties via the Admin API (bypasses GA4 UI rejection of service-account emails) | Chris | Deferred 2026-05-11 |
+| 2 | Wire GA4 client (sessions per agency, weekly window) | claude | Blocked on item #1 |
+| 3 | Wire HighLevel client (calendars + opportunities + won-stage transitions) | claude | All 4 PITs and IDs ready; calendar inclusion rule defined. **Unblocked.** |
+| 4 | Wire Teamwork client (project filter by Category + Tag) | claude | Token ready; verify exact category names match the Teamwork UI. **Unblocked.** |
+| 5 | Register Intuit Developer app for QBO | Chris | Provides client_id / client_secret + per-realm refresh tokens. Pending. |
+| 6 | Wire QBO client (AR aging, P&L, Balance Sheet) | claude | Blocked on item #5 |
+| 7 | Wire `Upsells & Churn` tab reader | claude | Verify aggregate vs per-agency structure first. **Unblocked.** |
+| 8 | Implement snapshot orchestrator (`src/snapshot.py`) | claude | Coordinates all sources, writes to `2026 Scorecard` weekly cells. Last step after sources are wired. |
+| 9 | Implement period roll-ups (Q1-Q4, Last Month, YTD) | claude | Dashboard tabs disabled until this lands. |
+| 10 | Build out chart components (Traffic & Discovery line, Financial bars) | claude | Need ≥4 weeks of trend data |
+| 11 | Set up Cloud Scheduler weekly trigger | claude | Mon 06:00 PT, after snapshot job exists |
+| 12 | Connect GitHub → Cloud Build for auto-deploy | Chris | One-time UI auth |
+| 13 | Stand up Cloudflare Access | Chris + claude | Define viewer allowlist |
+| 14 | Strategy/Planning Calls UI placement | Chris | Currently absent from grid; add as 9th card or merge with Discovery |
+| 15 | Hit % thresholds final values | Chris | Currently 100/50 boundaries, inverted for Churn+AR |
+| 16 | Total Rollup view (sidebar item disabled today) | claude | Aggregate KPIs across all 4 agencies |
 
 ---
 
@@ -496,5 +521,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 | 2026-04-27 | `4060b55` | TMSA (row 94) and IPA (row 115) agency blocks added. All 4 agencies now mapped. |
 | 2026-04-27 | `7ecfead` | Pass 2: KPI cards now show last week's value as the big number (instead of YTD). Weekly goal pro-rated for incremental metrics. New "Weekly Scorecard Detail" table below the cards with last 8 trailing weekly columns. Metric-type behavior (incremental/snapshot/rate) drives goal calc and color logic. |
 | 2026-04-27 | `92dae7b` | Pass 2b: Fixed Calendar Month Actual cells leaking into weekly-column list (multi-line header `Calendar\nMonth\nActual` wasn't being normalized). After fix, FANNIT current-week values match Chris's expected: Discovery=4, New Sales=0, Onboarding=1, Churn=4.8%, AR=$23,932, Cash Collected=$13,247. |
-| 2026-04-27 | this commit | Comprehensive brief regeneration; first sync to `fannit-system-docs`. |
+| 2026-04-27 | `b4f86ee` | Comprehensive brief regeneration; first sync to `fannit-system-docs`. |
+| 2026-05-11 | `94d8414` | Week picker pass: default to last-completed-week so all KPI cards align on one week (fixes "data is wrong" perception caused by mixed-week display); new `Week ending` dropdown next to title lists all populated weeks; `/api/scorecard` accepts `&date=M/D` and returns `selected_week` + `available_weeks` for the picker. Period tabs (Q1-Q4 / Last Month / YTD) still disabled. |
+| 2026-05-11 | this commit | Session wrap-up: brief refreshed with architectural intent (sources-primary, sheet-as-write-target), GA4 access blocker logged, QBO MCP connector noted as out-of-band tool. Synced to `fannit-system-docs`. |
 
