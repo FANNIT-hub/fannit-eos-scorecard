@@ -39,6 +39,7 @@ log = logging.getLogger("eos-scorecard.snapshot")
 
 # Live KPI label -> its index within the 8-row KPI block.
 _LIVE_LABEL_ROW_OFFSET = {
+    "Website / LP Traffic": KPI_LABELS.index("Website / LP Traffic"),
     "Discovery Calls": KPI_LABELS.index("Discovery Calls"),
     "New Sales (15% of Discovery)": KPI_LABELS.index("New Sales (15% of Discovery)"),
     "Clients in Onboarding": KPI_LABELS.index("Clients in Onboarding"),

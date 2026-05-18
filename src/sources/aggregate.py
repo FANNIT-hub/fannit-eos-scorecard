@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from ..config import AGENCIES
-from . import highlevel, teamwork
+from . import ga4, highlevel, teamwork
 
 log = logging.getLogger("eos-scorecard.aggregate")
 
@@ -31,6 +31,7 @@ CACHE_TTL_SECONDS = 600  # 10 min
 
 # KPI labels in the scorecard that this module can supply live.
 LIVE_KPI_LABELS = (
+    "Website / LP Traffic",
     "Discovery Calls",
     "New Sales (15% of Discovery)",
     "Clients in Onboarding",
@@ -94,6 +95,13 @@ def live_metrics(agency: str, week_label: str) -> dict:
             result["Clients in Onboarding"] = ob
     except Exception as exc:  # noqa: BLE001
         log.warning("live Teamwork fail %s %s: %s", agency, week_label, exc)
+
+    try:
+        sess = ga4.weekly_sessions(agency, week_label)
+        if sess is not None:
+            result["Website / LP Traffic"] = sess
+    except Exception as exc:  # noqa: BLE001
+        log.warning("live GA4 fail %s %s: %s", agency, week_label, exc)
 
     _cache[key] = (now, result)
     return result
