@@ -2,7 +2,7 @@
 
 > **Audience:** Chris Fink (owner) and any future operator (technical or non-technical) who needs to run, deploy, debug, or extend this system.
 >
-> **Status:** Living document. Update on every architectural change, new integration, or new operational procedure. Last meaningful update: 2026-05-11.
+> **Status:** Living document. Update on every architectural change, new integration, or new operational procedure. Last meaningful update: 2026-05-18 (GA4 + HL + Teamwork live; 4/8 KPIs sourced).
 
 ---
 
@@ -22,9 +22,29 @@ SAME values pushed into 2026 Scorecard tab on a weekly cron (legacy continuity)
 
 Sources are the **source of truth**. The sheet is a **write target**, not a read source. The sheet's existing weekly columns continue to be populated for anyone who still relies on the legacy view.
 
-### Where we are today
+### Where we are today (2026-05-18)
 
-The dashboard architecture above is the target. Current implementation **still reads from the sheet** while source integrations are being built one at a time. As each source comes online, the corresponding KPI swaps over to live data. The cron-driven sheet write is the last step (built once the read paths are proven).
+The architecture above is now **live for 4 of 8 KPIs**:
+
+| KPI | Source | Status |
+|---|---|---|
+| Website / LP Traffic | GA4 | ✅ live |
+| Discovery Calls | HighLevel | ✅ live |
+| New Sales | HighLevel | ✅ live |
+| Clients in Onboarding | Teamwork | ✅ live |
+| Strategy / Planning Calls | HighLevel | ✅ computed (no card yet) |
+| Churn (trailing 12mo) | 2026 Scorecard sheet | 📄 sheet by design (vetted formula) |
+| Total $ AR Past 30 Days | QuickBooks Online | ⛔ blocked: Intuit Dev app |
+| Cash Collected | QuickBooks Online | ⛔ blocked: Intuit Dev app |
+| Cash on Hand | QuickBooks Online | ⛔ blocked: Intuit Dev app |
+
+Live KPIs override the sheet for the current / last-completed week (10-min
+TTL cache; older weeks read the sheet, which is what the snapshot job
+stamped at the time). The snapshot job pushes live values back into the
+`2026 Scorecard` weekly cells (verified: 16 cells / week 5/11).
+
+The only remaining integration is QBO, gated entirely on Chris registering
+the Intuit Developer app and sending `client_id` + `client_secret`.
 
 Serving layer: read-only dashboard from Cloud Run mirroring the Perplexity-built prototype layout.
 
@@ -41,7 +61,7 @@ Serving layer: read-only dashboard from Cloud Run mirroring the Perplexity-built
 | Secret Manager | https://console.cloud.google.com/security/secret-manager?project=fannit-eos-scorecard |
 | Source Google Sheet | https://docs.google.com/spreadsheets/d/1QyyYNoNR05V8hxjGSBYfvPqWANx37kJiGw3ePx-hz8c/edit |
 
-Latest deployed Cloud Run revision: `eos-scorecard-00006-kp6` (commit `94d8414`, "weekpicker").
+Latest deployed Cloud Run revision: `eos-scorecard-00008-vqc` (commit `d965b3d`, "ga4live").
 
 ---
 
