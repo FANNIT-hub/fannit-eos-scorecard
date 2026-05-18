@@ -125,7 +125,7 @@ To grant the runtime SA access to a new resource (e.g. a new GA4 property): add 
 
 | KPI | Source | Reader status | Per-agency setup |
 |---|---|---|---|
-| Website / LP Traffic | GA4 (sessions) | ⏳ not yet built | One property per agency. SA needs Viewer on each. |
+| Website / LP Traffic | GA4 (sessions) | ✅ LIVE | One property per agency. Runtime SA granted Viewer on all 4 via Admin API. |
 | Discovery Calls (showed) | HighLevel calendar events | ⏳ not yet built | Calendar pipelineId == `HIGHLEVEL[agency].pipeline_id` AND name CONTAINS "discovery" AND name DOES NOT CONTAIN "internal" AND isActive AND appointmentStatus = "showed". |
 | Strategy / Planning Calls (showed) | HighLevel calendar events | ⏳ not yet built | Same filter, calendar name CONTAINS "strategy" or "planning". |
 | New Sales (won) | HighLevel pipeline | ⏳ not yet built | Opportunities entering `HIGHLEVEL[agency].won_stage_id` during the week. |
@@ -141,7 +141,7 @@ To grant the runtime SA access to a new resource (e.g. a new GA4 property): add 
 
 | Source | Auth method | Storage | Status |
 |---|---|---|---|
-| GA4 | Service account (Viewer per property) | n/a (SA email alone) | ❌ SA not yet added to 4 properties. **GA4 UI rejects service-account emails;** must add via Analytics Admin API. Requires Chris to run `gcloud auth application-default login --scopes=...analytics.edit` first. Deferred 2026-05-11. |
+| GA4 | Service account (Viewer per property) | binding on each property | ✅ DONE 2026-05-18. SA granted Viewer on all 4 properties via Analytics Admin API `accessBindings.create` (v1alpha). GA4 UI rejects SA emails AND gcloud refuses analytics scope, so the grant token was minted via the OAuth Playground (`analytics.manage.users` scope) one-time. SA now reads autonomously; no further tokens needed. |
 | HighLevel | Private Integration Token (PIT, location-scoped) | Secret Manager | ✅ All 4 PITs stored: `highlevel-pit-fannit`, `highlevel-pit-hmc`, `highlevel-pit-tmsa`, `highlevel-pit-ipa` |
 | Teamwork | API token (per-user, one shared) | Secret Manager `teamwork-api-token` | ✅ Stored |
 | QBO | OAuth 2.0 + refresh token | Secret Manager (planned) | ❌ Intuit Developer app not yet registered; no tokens minted. Separately, an Intuit QBO MCP connector was loaded into Chris's Claude session for ad-hoc queries, but that's session-scoped to Claude and not callable from Cloud Run. |
@@ -472,7 +472,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 | 3 | Cloud Run URL serves `/healthz` via the `StaticFiles` mount fallthrough sometimes (404 from Google front-door) | Treat as a known oddity; `/api/*` and `/` work reliably. May resolve by reordering routes if it matters. |
 | 4 | IPA has no QBO data; cells render "—" | By design. Each integration runs independently; missing creds for one source don't block others. |
 | 5 | Sheet has duplicate "💸 SALES PIPELINE" pipelines in IPA's HL location | Use `T4bqE5CGEaw8P2vU1H0z` (the 63-opportunity variant). The other one is stale. |
-| 6 | GA4 UI rejects service-account emails when adding to property access ("This email doesn't match a Google Account") | Bypass via Analytics Admin API. Requires `gcloud auth application-default login --scopes=...,https://www.googleapis.com/auth/analytics.edit` then POST to `https://analyticsadmin.googleapis.com/v1beta/properties/{id}/accessBindings`. Deferred 2026-05-11 pending Chris running the auth command. |
+| 6 | GA4 UI rejects service-account emails. gcloud ALSO refuses to mint an Analytics-scoped token (fixed scope allowlist) and the gcloud OAuth client is blocked by Workspace policy for Analytics. | RESOLVED 2026-05-18. Path that worked: OAuth Playground (a Google-verified app, not blocked) → authorize `https://www.googleapis.com/auth/analytics.manage.users` as chris@fannit.com → exchange for access_token → `POST https://analyticsadmin.googleapis.com/v1alpha/properties/{id}/accessBindings` with `{"user":"<runtime SA>","roles":["predefinedRoles/viewer"]}`. NOTE: accessBindings is **v1alpha** (v1beta 404s) and needs **analytics.manage.users** (analytics.edit is insufficient). One-time; SA reads via ADC thereafter. |
 | 7 | Default "rightmost populated weekly cell" causes KPI cards to land on DIFFERENT weeks per KPI when some sources update faster than others. Visually reads as "data is wrong." | Fixed in commit `94d8414` (week picker pass). Default is now `last_completed_week_label()` so every card lands on the same week. User can pick any other week from the dropdown. |
 
 ---
@@ -481,8 +481,8 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
-| 1 | Run `gcloud auth application-default login --scopes=...analytics.edit` so we can grant the runtime SA Viewer access on the 4 GA4 properties via the Admin API (bypasses GA4 UI rejection of service-account emails) | Chris | Deferred 2026-05-11 |
-| 2 | Wire GA4 client (sessions per agency, weekly window) | claude | Blocked on item #1 |
+| 1 | ~~Grant runtime SA on GA4 properties~~ | — | ✅ DONE 2026-05-18 via OAuth Playground + Admin API |
+| 2 | ~~Wire GA4 client~~ | — | ✅ DONE 2026-05-18 (`ga4live`) |
 | 3 | Wire HighLevel client (calendars + opportunities + won-stage transitions) | claude | All 4 PITs and IDs ready; calendar inclusion rule defined. **Unblocked.** |
 | 4 | Wire Teamwork client (project filter by Category + Tag) | claude | Token ready; verify exact category names match the Teamwork UI. **Unblocked.** |
 | 5 | Register Intuit Developer app for QBO | Chris | Provides client_id / client_secret + per-realm refresh tokens. Pending. |
@@ -524,5 +524,6 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 | 2026-04-27 | `b4f86ee` | Comprehensive brief regeneration; first sync to `fannit-system-docs`. |
 | 2026-05-11 | `94d8414` | Week picker pass: default to last-completed-week so all KPI cards align on one week (fixes "data is wrong" perception caused by mixed-week display); new `Week ending` dropdown next to title lists all populated weeks; `/api/scorecard` accepts `&date=M/D` and returns `selected_week` + `available_weeks` for the picker. Period tabs (Q1-Q4 / Last Month / YTD) still disabled. |
 | 2026-05-11 | `401d2cd` | Session wrap-up: brief refreshed with architectural intent (sources-primary, sheet-as-write-target), GA4 access blocker logged, QBO MCP connector noted as out-of-band tool. Synced to `fannit-system-docs`. |
+| 2026-05-18 | `ga4live` | **GA4 live.** Runtime SA granted Viewer on all 4 properties via OAuth Playground (`analytics.manage.users`) + Admin API `accessBindings` v1alpha. `src/sources/ga4.py` (google-analytics-data SDK, ADC). Website/LP Traffic now live for all 4 agencies + written by snapshot. Verified week 5/11: FANNIT 223, HMC 142, TMSA 84, IPA 25. 4 of 8 KPIs now live (Traffic, Discovery, New Sales, Onboarding). Remaining: Churn (sheet, intentional), AR/Cash Collected/Cash on Hand (QBO, blocked on Intuit Dev app). |
 | 2026-05-18 | `ebecf9b` | **Live sources shipped.** HighLevel (Discovery, New Sales, Strategy/Planning) + Teamwork (Onboarding) clients built and deployed. `src/sources/{secrets,highlevel,teamwork,aggregate}.py` + `src/snapshot.py`. Dashboard overrides sheet with live values for current/last-completed week (10-min TTL cache, sheet fallback for older weeks + Teamwork's no-history limitation), shows ● LIVE vs (sheet) badge per card. `/internal/snapshot` writes pulled values into the 2026 Scorecard weekly cells — verified 12 cells written for week 5/11 across all 4 agencies. HL calendar pipeline-link rule dropped (HL calendar object has no pipelineId) — falls back to active + non-internal + name-token rule. Dropped python-dateutil, added tzdata. Churn stays sheet-sourced by design. GA4 confirmed hard-blocked: gcloud refuses to mint an analytics-scoped token from existing creds; needs Chris's one `gcloud auth application-default login --scopes=...analytics.edit` command. |
 
