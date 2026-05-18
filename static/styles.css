@@ -189,6 +189,12 @@ body {
   color: var(--text-dim);
   margin-top: -3px;
 }
+.live-badge {
+  color: var(--green);
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
 .kpi-value {
   font-size: 28px;
   font-weight: 700;

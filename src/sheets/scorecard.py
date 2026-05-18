@@ -149,6 +149,7 @@ class Kpi:
     current_week_date: str | None
     weekly_goal: float | None  # pro-rated for incremental, target for snapshot/rate
     weekly_hit_pct: float | None  # current week against weekly goal
+    is_live: bool = False  # True when value came from a live source pull
     weeks: list[WeekValue] = field(default_factory=list)  # last 8 populated weeks
 
 
@@ -333,6 +334,31 @@ def read_agency_kpis(
                 weekly_hit_pct=weekly_hit,
                 weeks=recent,
             )
+        )
+
+    # --- Live source override --------------------------------------------
+    # For the current / last-completed week, replace the sheet value of the
+    # KPIs we can pull live (Discovery, New Sales, Onboarding). Older weeks
+    # keep the sheet value (what the snapshot job stamped at the time).
+    try:
+        from ..sources import aggregate
+
+        today_label = last_completed_week_label()
+        if aggregate.is_live_week(target_label, today_label):
+            live = aggregate.live_metrics(agency, target_label)
+            for k in out:
+                if k.label in live and live[k.label] is not None:
+                    k.current_week_value = float(live[k.label])
+                    k.weekly_hit_pct = _compute_weekly_hit_pct(
+                        k.current_week_value, k.weekly_goal
+                    )
+                    k.is_live = True
+    except Exception as exc:  # noqa: BLE001  -- live is best-effort
+        # Never let a live-source error break the sheet-backed dashboard.
+        import logging
+
+        logging.getLogger("eos-scorecard.scorecard").warning(
+            "live override skipped for %s/%s: %s", agency, target_label, exc
         )
 
     # Sort week labels chronologically. Format is M/D so split + int compare

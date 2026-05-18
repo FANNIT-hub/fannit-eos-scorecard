@@ -110,16 +110,18 @@ GA4_METRIC = "sessions"
 # by Category = agency name AND Tag = "Onboarding".
 # ---------------------------------------------------------------------------
 TEAMWORK_DOMAIN = "fannit.teamwork.com"
-TEAMWORK_ONBOARDING_TAG = "Onboarding"
 
-# Map agency key -> Teamwork project Category name. To be confirmed when
-# wiring Teamwork (the category strings need to match exactly what's in the
-# Teamwork UI).
-TEAMWORK_AGENCY_CATEGORY: dict[str, str] = {
-    "FANNIT": "FANNIT",
-    "HMC": "Hardscape Marketing Crew",
-    "TMSA": "The Med Spa Agency",
-    "IPA": "Inspired Painting Marketing Agency",
+# Confirmed via Teamwork API 2026-05-18:
+#   /projects/api/v3/projectcategories.json and /tags.json
+TEAMWORK_ONBOARDING_TAG_ID = 117305  # tag named "Onboarding"
+
+# Map agency key -> Teamwork project Category ID (more robust than name match;
+# note IPA's real category name is "Inspired Painter Marketing Agency").
+TEAMWORK_AGENCY_CATEGORY_ID: dict[str, int] = {
+    "FANNIT": 35408,  # "FANNIT"
+    "HMC": 35409,     # "Hardscape Marketing Crew"
+    "TMSA": 35410,    # "The Med Spa Agency"
+    "IPA": 35411,     # "Inspired Painter Marketing Agency"
 }
 
 

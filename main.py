@@ -65,11 +65,24 @@ def get_scorecard(agency: str = "FANNIT", date: str | None = None):
 
 
 @app.post("/internal/snapshot")
-def run_snapshot():
-    return JSONResponse(
-        status_code=501,
-        content={"error": "not_implemented", "next": "wire src/snapshot.py"},
-    )
+def trigger_snapshot(date: str | None = None):
+    """Pull live source metrics and write them into the 2026 Scorecard tab.
+
+    Triggered weekly by Cloud Scheduler (planned) or manually. `date` is an
+    optional M/D week label; defaults to last completed week.
+
+    NOTE: not yet auth-gated. Tracked as an open item; harden with an OIDC
+    check from Cloud Scheduler before relying on the weekly cron.
+    """
+    try:
+        from src.snapshot import run_snapshot
+
+        return run_snapshot(week_label=date)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("snapshot failed")
+        return JSONResponse(
+            status_code=500, content={"error": "snapshot_failed", "detail": str(exc)}
+        )
 
 
 # Serve the static frontend last so /api/* and /healthz win when paths overlap.

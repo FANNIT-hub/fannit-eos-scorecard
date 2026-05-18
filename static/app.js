@@ -117,7 +117,11 @@ function buildCard(k) {
 
   const source = document.createElement("div");
   source.className = "kpi-source";
-  source.textContent = k.source || "—";
+  if (k.is_live) {
+    source.innerHTML = `${k.source || "—"} <span class="live-badge">● LIVE</span>`;
+  } else {
+    source.textContent = `${k.source || "—"} (sheet)`;
+  }
 
   const value = document.createElement("div");
   value.className = "kpi-value";
